@@ -7,6 +7,7 @@
 
 import SwiftUI
 import Vision
+import CoreImage
 
 struct BoundingBoxOverlay: View {
     let boundingBoxes: [CGRect]
@@ -32,6 +33,7 @@ struct BoundingBoxOverlay: View {
 
 struct ContentView: View {
     @State private var recognizedText = ""
+    @State private var translatedText = ""
     
     @State private var boundingBoxes: [CGRect] = []
     
@@ -102,6 +104,10 @@ struct ContentView: View {
             TextEditor(text: $recognizedText)
                 .background(Color.gray)
 //                .cornerRadius(8)
+            
+            TextEditor(text: $translatedText)
+                .background(Color.gray)
+//                .cornerRadius(8)
         }
         .preferredColorScheme(.light)
     }
@@ -162,7 +168,7 @@ struct ContentView: View {
             newBoundingBoxes.append(.zero)
         }
         
-        var newCharacterImages: [UIImage] = []
+        var newCropped: [CGImage] = []
 
         for box in newBoundingBoxes {
             let imageWidth = CGFloat(cgImage.width)
@@ -176,9 +182,26 @@ struct ContentView: View {
             )
 
             if let cropped = cgImage.cropping(to: rectInPixels) {
-                let uiImage = UIImage(cgImage: cropped)
-                newCharacterImages.append(uiImage)
+                newCropped.append(cropped)
             }
+        }
+        
+        let newCharacterImages: [UIImage] = newCropped.map { cropped in
+            UIImage(cgImage: cropped)
+        }
+        
+        var isPinkBitmap: [Bool] = []
+        for (index, cropped) in newCropped.enumerated() {
+            let averageColor = getAverageColor(cropped)
+            var green: CGFloat = 0
+            averageColor.getRed(nil, green: &green, blue: nil, alpha: nil)
+            let isPink = green < 0.3
+            isPinkBitmap.append(isPink)
+//            if isPink {
+//                print(text[index], "pink")
+//            } else {
+//                print(text[index], "white")
+//            }
         }
         
 //        print("newBoundingBoxes", newBoundingBoxes)
@@ -187,8 +210,57 @@ struct ContentView: View {
             observation.topCandidates(1).first?.string
         }
         
+        let noWhitespace = recognizedStrings[0].components(separatedBy: .whitespacesAndNewlines).joined().dropLast()
+        
+        let letters = Array(noWhitespace)
+        
+        let charMap: [Character: Character] = [
+            "v": "f",
+            "n": "r",
+            "a": "e",
+            "d": "t",
+        ]
+        
+        let text = Array(recognizedStrings[0])
+        
+        print("text", text)
+        
+        let startLetters = text.index(text.startIndex, offsetBy: 9)
+        let startPink = text.index(text.startIndex, offsetBy: 8)
+        
+        print("letters", text[startLetters...])
+        print("isPinkBitmap", isPinkBitmap[startPink...])
+        
+        let lettersSlice = Array(text[startLetters...])
+        let isPinkBitmapSlice = Array(isPinkBitmap[startPink...])
+        
+        var i = 0
+        var translated: [Character] = []
+        for letter in lettersSlice {
+            if letter == " " {
+                print("Space!")
+                translated.append(letter)
+                continue
+            }
+            
+            if i >= isPinkBitmapSlice.count {
+                translated.append(letter)
+                continue
+            }
+            
+            if !isPinkBitmapSlice[i] {
+                translated.append(charMap[letter] ?? letter)
+            } else {
+                translated.append(letter)
+            }
+            
+            i += 1
+        }
+        
+        print("translated", translated)
+        
         print("Type of recognizedStrings:", type(of: recognizedStrings))
-        print("Recognized strings:", recognizedStrings.joined(separator: " "))
+        print("Recognized strings:", String(translated))
         
         //            processResults(recognizedStrings)
         
@@ -196,7 +268,26 @@ struct ContentView: View {
             recognizedText = recognizedStrings.joined(separator: " ")
             boundingBoxes = newBoundingBoxes
             croppedCharacterImages = newCharacterImages
+            let endIndex = text.index(text.startIndex, offsetBy: 9, limitedBy: text.endIndex) ?? text.endIndex
+            let firstNine = String(text[text.startIndex..<endIndex])
+            translatedText = firstNine + String(translated)
         }
+    }
+    
+    private func getAverageColor(_ cropped: CGImage) -> UIColor {
+        let ciImage = CIImage(cgImage: cropped)
+        let extent = ciImage.extent
+
+        let filter = CIFilter(name: "CIAreaAverage", parameters: [kCIInputImageKey: ciImage, kCIInputExtentKey: CIVector(cgRect: extent)])!
+        let outputImage = filter.outputImage!
+
+        var bitmap = [UInt8](repeating: 0, count: 4)
+        let context = CIContext()
+        context.render(outputImage, toBitmap: &bitmap, rowBytes: 4, bounds: CGRect(x: 0, y: 0, width: 1, height: 1), format: .RGBA8, colorSpace: CGColorSpaceCreateDeviceRGB())
+
+        let averageColor = UIColor(red: CGFloat(bitmap[0]) / 255.0, green: CGFloat(bitmap[1]) / 255.0, blue: CGFloat(bitmap[2]) / 255.0, alpha: 1)
+        
+        return averageColor
     }
 }
 
