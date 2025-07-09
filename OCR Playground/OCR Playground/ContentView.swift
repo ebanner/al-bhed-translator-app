@@ -191,7 +191,7 @@ struct ContentView: View {
         }
         
         var isPinkBitmap: [Bool] = []
-        for (index, cropped) in newCropped.enumerated() {
+        for cropped in newCropped {
             let averageColor = getAverageColor(cropped)
             var green: CGFloat = 0
             averageColor.getRed(nil, green: &green, blue: nil, alpha: nil)
@@ -210,10 +210,6 @@ struct ContentView: View {
             observation.topCandidates(1).first?.string
         }
         
-        let noWhitespace = recognizedStrings[0].components(separatedBy: .whitespacesAndNewlines).joined().dropLast()
-        
-        let letters = Array(noWhitespace)
-        
         let charMap: [Character: Character] = [
             "v": "f",
             "n": "r",
@@ -225,8 +221,15 @@ struct ContentView: View {
         
         print("text", text)
         
-        let startLetters = text.index(text.startIndex, offsetBy: 9)
-        let startPink = text.index(text.startIndex, offsetBy: 8)
+        let colonIdx = text.firstIndex(of: ":")
+        
+        let startLetters = colonIdx != nil
+            ? text.index(colonIdx!, offsetBy: 2, limitedBy: text.endIndex) ?? text.endIndex
+            : text.startIndex
+        
+        let startPink = colonIdx != nil
+            ? text.index(colonIdx!, offsetBy: 1, limitedBy: text.endIndex) ?? text.endIndex
+            : text.startIndex
         
         print("letters", text[startLetters...])
         print("isPinkBitmap", isPinkBitmap[startPink...])
@@ -268,9 +271,8 @@ struct ContentView: View {
             recognizedText = recognizedStrings.joined(separator: " ")
             boundingBoxes = newBoundingBoxes
             croppedCharacterImages = newCharacterImages
-            let endIndex = text.index(text.startIndex, offsetBy: 9, limitedBy: text.endIndex) ?? text.endIndex
-            let firstNine = String(text[text.startIndex..<endIndex])
-            translatedText = firstNine + String(translated)
+            let prefix = String(text[..<startLetters])
+            translatedText = prefix + String(translated)
         }
     }
     
