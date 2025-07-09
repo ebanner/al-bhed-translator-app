@@ -36,6 +36,7 @@ struct ContentView: View {
     @State private var boundingBoxes: [CGRect] = []
     
     @State private var croppedCharacterImage: UIImage? = nil
+    @State private var croppedCharacterImages: [UIImage] = []
     
 //    @State private var boundingBoxes = [
 //        CGRect(
@@ -62,22 +63,36 @@ struct ContentView: View {
                 Image("Al Bhed")
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-                    .overlay(
-                        GeometryReader { geometry in
-                            BoundingBoxOverlay(
-                                boundingBoxes: boundingBoxes,
-                                geometrySize: geometry.size
-                            )
-                        }
-                    )
+//                    .overlay(
+//                        GeometryReader { geometry in
+//                            BoundingBoxOverlay(
+//                                boundingBoxes: boundingBoxes,
+//                                geometrySize: geometry.size
+//                            )
+//                        }
+//                    )
             }
             
-            if let img = croppedCharacterImage {
-                Image(uiImage: img)
-                    .resizable()
-                    .frame(width: 50, height: 50)
-                    .border(Color.black)
+            ScrollView(.horizontal) {
+                HStack {
+                    ForEach(Array(croppedCharacterImages.enumerated()), id: \.offset) { idx, img in
+                        Image(uiImage: img)
+                            .resizable()
+                            .frame(width: 10, height: 10)
+                            .border(Color.blue)
+                    }
+                }
             }
+            
+//            // Render all cropped character images
+//            HStack {
+//                ForEach(Array(croppedCharacterImages.enumerated()), id: \.offset) { idx, img in
+//                    Image(uiImage: img)
+//                        .resizable()
+//                        .frame(width: 50, height: 50)
+//                        .border(Color.blue)
+//                }
+//            }
             
             Button("Recognize") {
                 recognizeText()
@@ -147,22 +162,22 @@ struct ContentView: View {
             newBoundingBoxes.append(.zero)
         }
         
-        let box = newBoundingBoxes[0]
-        
-        let imageWidth = CGFloat(cgImage.width)
-        let imageHeight = CGFloat(cgImage.height)
+        var newCharacterImages: [UIImage] = []
 
-        let rectInPixels = CGRect(
-            x: box.minX * imageWidth,
-            y: (1 - box.minY - box.height) * imageHeight,
-            width: box.width * imageWidth,
-            height: box.height * imageHeight
-        )
-        
-        if let cropped = cgImage.cropping(to: rectInPixels) {
-            let uiImage = UIImage(cgImage: cropped)
-            DispatchQueue.main.async {
-                croppedCharacterImage = uiImage
+        for box in newBoundingBoxes {
+            let imageWidth = CGFloat(cgImage.width)
+            let imageHeight = CGFloat(cgImage.height)
+
+            let rectInPixels = CGRect(
+                x: box.minX * imageWidth,
+                y: (1 - box.minY - box.height) * imageHeight,
+                width: box.width * imageWidth,
+                height: box.height * imageHeight
+            )
+
+            if let cropped = cgImage.cropping(to: rectInPixels) {
+                let uiImage = UIImage(cgImage: cropped)
+                newCharacterImages.append(uiImage)
             }
         }
         
@@ -180,6 +195,7 @@ struct ContentView: View {
         DispatchQueue.main.async {
             recognizedText = recognizedStrings.joined(separator: " ")
             boundingBoxes = newBoundingBoxes
+            croppedCharacterImages = newCharacterImages
         }
     }
 }
