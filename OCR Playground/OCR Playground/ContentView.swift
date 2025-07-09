@@ -35,6 +35,8 @@ struct ContentView: View {
     
     @State private var boundingBoxes: [CGRect] = []
     
+    @State private var croppedCharacterImage: UIImage? = nil
+    
 //    @State private var boundingBoxes = [
 //        CGRect(
 //            x: 0.37778348771915893,
@@ -70,6 +72,13 @@ struct ContentView: View {
                     )
             }
             
+            if let img = croppedCharacterImage {
+                Image(uiImage: img)
+                    .resizable()
+                    .frame(width: 50, height: 50)
+                    .border(Color.black)
+            }
+            
             Button("Recognize") {
                 recognizeText()
             }
@@ -102,6 +111,8 @@ struct ContentView: View {
     }
     
     private func handleTextRecognition(request: VNRequest, error: Error?) {
+        guard let cgImage = UIImage(named: "Al Bhed")?.cgImage else { return }
+        
         guard let observations = request.results as? [VNRecognizedTextObservation] else {
             return
         }
@@ -134,6 +145,25 @@ struct ContentView: View {
             }
         } else {
             newBoundingBoxes.append(.zero)
+        }
+        
+        let box = newBoundingBoxes[0]
+        
+        let imageWidth = CGFloat(cgImage.width)
+        let imageHeight = CGFloat(cgImage.height)
+
+        let rectInPixels = CGRect(
+            x: box.minX * imageWidth,
+            y: (1 - box.minY - box.height) * imageHeight,
+            width: box.width * imageWidth,
+            height: box.height * imageHeight
+        )
+        
+        if let cropped = cgImage.cropping(to: rectInPixels) {
+            let uiImage = UIImage(cgImage: cropped)
+            DispatchQueue.main.async {
+                croppedCharacterImage = uiImage
+            }
         }
         
 //        print("newBoundingBoxes", newBoundingBoxes)
