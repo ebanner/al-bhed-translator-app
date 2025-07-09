@@ -113,7 +113,13 @@ struct ContentView: View {
         
         let newBoundingBoxes: [CGRect] = observations.map { observation in
             guard let candidate = observation.topCandidates(1).first else { return .zero }
-            let stringRange = candidate.string.startIndex..<candidate.string.endIndex
+            print("startIndex", candidate.string.startIndex)
+            print("endIndex", candidate.string.endIndex)
+//            let endIndex = candidate.string.index(after: candidate.string.startIndex)
+//            print("index + 1 =", endIndex)
+            let n = 1  // or whatever number you want
+            let endIndex = candidate.string.index(candidate.string.startIndex, offsetBy: n, limitedBy: candidate.string.endIndex) ?? candidate.string.endIndex
+            let stringRange = candidate.string.startIndex..<endIndex
             let boxObservation = try? candidate.boundingBox(for: stringRange)
             let boundingBox = boxObservation?.boundingBox ?? .zero
             return boundingBox
