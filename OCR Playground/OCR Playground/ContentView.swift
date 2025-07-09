@@ -91,7 +91,8 @@ struct ContentView: View {
 
         // Create a new request to recognize text.
         let request = VNRecognizeTextRequest(completionHandler: handleTextRecognition)
-
+        request.recognitionLevel = .fast
+        
         do {
             // Perform the text-recognition request.
             try requestHandler.perform([request])
@@ -111,18 +112,28 @@ struct ContentView: View {
         
         //            print("observations", observations)
         
-        let newBoundingBoxes: [CGRect] = observations.map { observation in
-            guard let candidate = observation.topCandidates(1).first else { return .zero }
-            print("startIndex", candidate.string.startIndex)
-            print("endIndex", candidate.string.endIndex)
-//            let endIndex = candidate.string.index(after: candidate.string.startIndex)
-//            print("index + 1 =", endIndex)
-            let n = 1  // or whatever number you want
-            let endIndex = candidate.string.index(candidate.string.startIndex, offsetBy: n, limitedBy: candidate.string.endIndex) ?? candidate.string.endIndex
-            let stringRange = candidate.string.startIndex..<endIndex
-            let boxObservation = try? candidate.boundingBox(for: stringRange)
-            let boundingBox = boxObservation?.boundingBox ?? .zero
-            return boundingBox
+        var newBoundingBoxes: [CGRect] = []
+
+        if let observation = observations.first,
+           let candidate = observation.topCandidates(1).first {
+            
+            let count = candidate.string.count
+
+            if count < 2 {
+                newBoundingBoxes.append(.zero)
+            } else {
+                for i in 0..<(count - 1) {
+                    let startIndex = candidate.string.index(candidate.string.startIndex, offsetBy: i, limitedBy: candidate.string.endIndex) ?? candidate.string.endIndex
+                    let endIndex = candidate.string.index(candidate.string.startIndex, offsetBy: i + 1, limitedBy: candidate.string.endIndex) ?? candidate.string.endIndex
+
+                    let stringRange = startIndex..<endIndex
+                    let boxObservation = try? candidate.boundingBox(for: stringRange)
+                    let boundingBox = boxObservation?.boundingBox ?? .zero
+                    newBoundingBoxes.append(boundingBox)
+                }
+            }
+        } else {
+            newBoundingBoxes.append(.zero)
         }
         
 //        print("newBoundingBoxes", newBoundingBoxes)
