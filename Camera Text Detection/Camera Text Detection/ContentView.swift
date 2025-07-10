@@ -9,29 +9,27 @@ import SwiftUI
 import UIKit
 import AVFoundation
 import Vision
+import Combine
 
 struct ContentView: View {
     @State private var recognizedText: String = ""
+    @State private var boundingBoxes: [CGRect] = []
 
-    let bbox = CGRect(x: 0.3, y: 0.2, width: 0.4, height: 0.3)
-    
     var body: some View {
         ZStack {
-            CameraView(recognizedText: $recognizedText)
+            CameraView(recognizedText: $recognizedText, boundingBoxes: $boundingBoxes)
                 .edgesIgnoringSafeArea(.all)
             
             GeometryReader { geometry in
-                let rect = CGRect(
-                    x: bbox.origin.x * geometry.size.width,
-                    y: bbox.origin.y * geometry.size.height,
-                    width: bbox.size.width * geometry.size.width,
-                    height: bbox.size.height * geometry.size.height
-                )
-                
-                Rectangle()
-                    .stroke(Color.red, lineWidth: 3)
-                    .frame(width: rect.width, height: rect.height)
-                    .position(x: rect.midX, y: rect.midY)
+                ForEach(boundingBoxes.indices, id: \.self) { i in
+                    let bbox = boundingBoxes[i]
+                    let rect = bbox
+
+                    Rectangle()
+                        .stroke(Color.red, lineWidth: 2)
+                        .frame(width: rect.width, height: rect.height)
+                        .position(x: rect.midX, y: rect.midY)
+                }
             }
             .edgesIgnoringSafeArea(.all)
 
@@ -65,17 +63,36 @@ struct ContentView: View {
 
 struct CameraView: UIViewRepresentable {
     @Binding var recognizedText: String
+    @Binding var boundingBoxes: [CGRect]
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
 
     func makeUIView(context: Context) -> CameraPreview {
-        return CameraPreview(recognizedText: $recognizedText)
+        let view = CameraPreview(recognizedText: $recognizedText)
+        view.$boundingBoxes
+            .receive(on: DispatchQueue.main)
+            .sink { boxes in
+                context.coordinator.boundingBoxes = boxes
+                boundingBoxes = boxes
+            }
+            .store(in: &context.coordinator.cancellables)
+        return view
     }
 
     func updateUIView(_ uiView: CameraPreview, context: Context) {
         // nothing to update
     }
+
+    class Coordinator {
+        var boundingBoxes: [CGRect] = []
+        var cancellables = Set<AnyCancellable>()
+    }
 }
 
-class CameraPreview: UIView, AVCaptureVideoDataOutputSampleBufferDelegate {
+class CameraPreview: UIView, AVCaptureVideoDataOutputSampleBufferDelegate, ObservableObject {
+    @Published var boundingBoxes: [CGRect] = []
     private let session = AVCaptureSession()
     private var previewLayer: AVCaptureVideoPreviewLayer!
     private var isProcessingFrame = false
@@ -95,7 +112,10 @@ class CameraPreview: UIView, AVCaptureVideoDataOutputSampleBufferDelegate {
         guard let observations = request.results as? [VNRecognizedTextObservation] else { return }
         let recognizedStrings = observations.compactMap { $0.topCandidates(1).first?.string }
         DispatchQueue.main.async {
-            self?.recognizedTextBinding.wrappedValue = recognizedStrings.joined(separator: "\n")
+            guard let self = self else { return }
+            self.recognizedTextBinding.wrappedValue = recognizedStrings.joined(separator: "\n")
+            let convertedBoxes = observations.map { self.previewLayer.layerRectConverted(fromMetadataOutputRect: $0.boundingBox) }
+            self.boundingBoxes = convertedBoxes
         }
     }
 
