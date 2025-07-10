@@ -65,14 +65,14 @@ struct ContentView: View {
                 Image("Al Bhed")
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-//                    .overlay(
-//                        GeometryReader { geometry in
-//                            BoundingBoxOverlay(
-//                                boundingBoxes: boundingBoxes,
-//                                geometrySize: geometry.size
-//                            )
-//                        }
-//                    )
+                    .overlay(
+                        GeometryReader { geometry in
+                            BoundingBoxOverlay(
+                                boundingBoxes: boundingBoxes,
+                                geometrySize: geometry.size
+                            )
+                        }
+                    )
             }
             
             ScrollView(.horizontal) {
@@ -241,7 +241,6 @@ struct ContentView: View {
         var translated: [Character] = []
         for letter in lettersSlice {
             if letter == " " {
-                print("Space!")
                 translated.append(letter)
                 continue
             }
