@@ -11,15 +11,16 @@ import AVFoundation
 import Vision
 
 struct ContentView: View {
+    @State private var recognizedText: String = ""
+
     let bbox = CGRect(x: 0.3, y: 0.2, width: 0.4, height: 0.3)
     
     var body: some View {
         ZStack {
-            CameraView()
+            CameraView(recognizedText: $recognizedText)
                 .edgesIgnoringSafeArea(.all)
             
             GeometryReader { geometry in
-                // Convert normalized bbox to absolute frame
                 let rect = CGRect(
                     x: bbox.origin.x * geometry.size.width,
                     y: bbox.origin.y * geometry.size.height,
@@ -41,6 +42,15 @@ struct ContentView: View {
                     .padding()
                     .background(Color.black.opacity(0.5))
                     .cornerRadius(10)
+                
+                ScrollView {
+                    Text(recognizedText)
+                        .foregroundColor(.yellow)
+                        .padding()
+                        .background(Color.black.opacity(0.5))
+                        .cornerRadius(10)
+                }
+                .frame(maxHeight: 200)
 
                 Spacer()
             }
@@ -54,12 +64,14 @@ struct ContentView: View {
 }
 
 struct CameraView: UIViewRepresentable {
+    @Binding var recognizedText: String
+
     func makeUIView(context: Context) -> CameraPreview {
-        return CameraPreview()
+        return CameraPreview(recognizedText: $recognizedText)
     }
 
     func updateUIView(_ uiView: CameraPreview, context: Context) {
-        // nothing to update for now
+        // nothing to update
     }
 }
 
@@ -67,24 +79,24 @@ class CameraPreview: UIView, AVCaptureVideoDataOutputSampleBufferDelegate {
     private let session = AVCaptureSession()
     private var previewLayer: AVCaptureVideoPreviewLayer!
     private var isProcessingFrame = false
+    private var recognizedTextBinding: Binding<String>
 
-    lazy var textRequest = VNRecognizeTextRequest { request, error in
-        guard let observations = request.results as? [VNRecognizedTextObservation] else { return }
-        for observation in observations {
-            if let candidate = observation.topCandidates(1).first {
-                print("Recognized text: \(candidate.string)")
-            }
-        }
-    }
-
-    override init(frame: CGRect) {
-        super.init(frame: frame)
+    init(recognizedText: Binding<String>) {
+        self.recognizedTextBinding = recognizedText
+        super.init(frame: .zero)
         initializeCamera()
     }
 
     required init?(coder: NSCoder) {
-        super.init(coder: coder)
-        initializeCamera()
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    lazy var textRequest = VNRecognizeTextRequest { [weak self] request, error in
+        guard let observations = request.results as? [VNRecognizedTextObservation] else { return }
+        let recognizedStrings = observations.compactMap { $0.topCandidates(1).first?.string }
+        DispatchQueue.main.async {
+            self?.recognizedTextBinding.wrappedValue = recognizedStrings.joined(separator: "\n")
+        }
     }
 
     private func initializeCamera() {
@@ -98,12 +110,10 @@ class CameraPreview: UIView, AVCaptureVideoDataOutputSampleBufferDelegate {
 
         session.addInput(input)
 
-        // Add preview
         previewLayer = AVCaptureVideoPreviewLayer(session: session)
         previewLayer.videoGravity = .resizeAspectFill
         layer.addSublayer(previewLayer)
 
-        // Add video data output
         let videoOutput = AVCaptureVideoDataOutput()
         videoOutput.setSampleBufferDelegate(self, queue: DispatchQueue(label: "VideoQueue"))
         session.addOutput(videoOutput)
