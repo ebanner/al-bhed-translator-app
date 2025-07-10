@@ -8,6 +8,7 @@
 import SwiftUI
 import UIKit
 import AVFoundation
+import Vision
 
 struct ContentView: View {
     let bbox = CGRect(x: 0.3, y: 0.2, width: 0.4, height: 0.3)
@@ -62,10 +63,19 @@ struct CameraView: UIViewRepresentable {
     }
 }
 
-class CameraPreview: UIView {
+class CameraPreview: UIView, AVCaptureVideoDataOutputSampleBufferDelegate {
     private let session = AVCaptureSession()
-
     private var previewLayer: AVCaptureVideoPreviewLayer!
+    private var isProcessingFrame = false
+
+    lazy var textRequest = VNRecognizeTextRequest { request, error in
+        guard let observations = request.results as? [VNRecognizedTextObservation] else { return }
+        for observation in observations {
+            if let candidate = observation.topCandidates(1).first {
+                print("Recognized text: \(candidate.string)")
+            }
+        }
+    }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -82,16 +92,21 @@ class CameraPreview: UIView {
 
         guard let device = AVCaptureDevice.default(for: .video),
               let input = try? AVCaptureDeviceInput(device: device),
-              session.canAddInput(input)
-        else {
+              session.canAddInput(input) else {
             return
         }
 
         session.addInput(input)
 
+        // Add preview
         previewLayer = AVCaptureVideoPreviewLayer(session: session)
         previewLayer.videoGravity = .resizeAspectFill
         layer.addSublayer(previewLayer)
+
+        // Add video data output
+        let videoOutput = AVCaptureVideoDataOutput()
+        videoOutput.setSampleBufferDelegate(self, queue: DispatchQueue(label: "VideoQueue"))
+        session.addOutput(videoOutput)
 
         session.startRunning()
     }
@@ -99,5 +114,33 @@ class CameraPreview: UIView {
     override func layoutSubviews() {
         super.layoutSubviews()
         previewLayer.frame = bounds
+    }
+
+    func captureOutput(
+        _ output: AVCaptureOutput,
+        didOutput sampleBuffer: CMSampleBuffer,
+        from connection: AVCaptureConnection
+    ) {
+        guard !isProcessingFrame else { return }
+        isProcessingFrame = true
+
+        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
+            isProcessingFrame = false
+            return
+        }
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            self?.recognizeText(in: pixelBuffer)
+            self?.isProcessingFrame = false
+        }
+    }
+
+    private func recognizeText(in pixelBuffer: CVPixelBuffer) {
+        let requestHandler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, options: [:])
+        do {
+            try requestHandler.perform([textRequest])
+        } catch {
+            print("Vision error: \(error)")
+        }
     }
 }
